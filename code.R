@@ -1,0 +1,93 @@
+library(tidyverse)
+library(rvest)
+library(lubridate)
+options(scipen = 100)
+
+#------------------------------------------------------------
+# 신상공개 키워드 청원 데이터 크롤링 (총 462건)
+#------------------------------------------------------------
+url <- "https://www1.president.go.kr/search?sortField=DATE&range=D&duration=D&searchField=title&startCount=1&searchTarget=petitions&viewCount=463&realSearchKeyword=%EC%8B%A0%EC%83%81%EA%B3%B5%EA%B0%9C&reQuery=2&startDate=2017%2F08%2F17&endDate=2021%2F07%2F04&query=%EC%8B%A0%EC%83%81%EA%B3%B5%EA%B0%9C"
+
+html <- read_html(url)
+
+title <- html %>% html_nodes("a > h2") %>% html_text()#contents > div.search_PG_contens > div > div.PG_contens_pd > div:nth-child(3) > a > h2
+
+start <- html %>% html_nodes("a > ul > li:nth-child(1) > span") %>% html_text()
+end <- html %>% html_nodes("a > ul > li:nth-child(2) > span") %>% html_text()
+num <- html %>% html_nodes("a > ul > li:nth-child(3) > span") %>% html_text()
+
+petition <- tibble(title,start,end,num)
+
+#------------------------------------------------------------
+# 신상공개 키워드 청원 데이터 정제
+#------------------------------------------------------------
+
+petition$num <- str_remove_all(petition$num,",")
+
+petition$num <- as.numeric(petition$num)
+
+petition$start <- as.Date(petition$start)
+petition$end <- as.Date(petition$end)
+
+ggplot(petition,aes(x=end,y=num)) + geom_point()
+
+petition %>% filter(num >= 200000) %>% view()
+
+pet_month <- petition %>% group_by(year(end),month(end)) %>% count()
+pet_month2 <- petition %>% filter(num >= 100) %>% group_by(year(end),month(end)) %>% count()
+
+pet_month <- pet_month %>% mutate(ym = str_c(`year(end)`,"-",`month(end)`,"-01"))
+pet_month2 <- pet_month2 %>% mutate(ym = str_c(`year(end)`,"-",`month(end)`,"-01"))
+
+pet_month$ym <- ymd(pet_month$ym)
+pet_month2$ym <- ymd(pet_month2$ym)
+
+#------------------------------------------------------------
+# 신상공개 키워드 청원 데이터 시각화
+#------------------------------------------------------------
+
+petition %>% 
+  ggplot(aes(x=end,y=num)) + geom_point()      
+
+pet_month %>% 
+  ggplot(aes(x=ym,y=n)) + geom_col() + scale_x_date(date_labels = "%y-%m", date_breaks = "2 months")
+
+pet_month2 %>% 
+  ggplot(aes(x=ym,y=n)) + geom_col() + scale_x_date(date_labels = "%y-%m", date_breaks = "2 months")
+
+#------------------------------------------------------------
+# 신상공개 데이터 시각화
+#------------------------------------------------------------
+
+data <- read_csv("https://docs.google.com/spreadsheets/d/e/2PACX-1vQvSNbZ4AqwxnOgyccdzFWTzaAqGbzTKbejV835XRnz2Y_5YPfm--FRj1bGyveSipXVReWTR6ui2On_/pub?gid=0&single=true&output=csv")
+
+data %>% 
+  group_by(형량1) %>% 
+  count() %>% 
+  mutate(a = "a") %>% 
+  ggplot(aes(x=a,y=n,fill=형량1)) + geom_col() + coord_flip()
+
+data %>% 
+  group_by(year(공개시기)) %>% 
+  count() %>% 
+  mutate(a=1) %>% 
+  ggplot(aes(x=`year(공개시기)`,y=a,size=n)) + geom_point(alpha=0.5) + 
+  scale_x_continuous(breaks = c(2010,2011,2012,2013,2014,2015,2016,2017,2018,2019,2020,2021)) + scale_size(breaks= c(1,3,5,7,9))
+
+data %>% 
+  filter(형량1 == "유기징역") %>% 
+  ggplot(aes(x=형량2)) + geom_bar()
+
+data %>% 
+  ggplot(aes(x=범죄연령)) + geom_bar() + geom_vline(xintercept = mean(data$범죄연령))
+
+mean(data$범죄연령)
+mean(data$형량2,na.rm=T)
+
+data %>% 
+  ggplot(aes(x=year(공개시기),y=피해자수,group=근거법령)) + geom_jitter(size=3,alpha=0.5) + facet_wrap(.~근거법령,ncol=1)+
+  scale_x_continuous(breaks = c(2010,2011,2012,2013,2014,2015,2016,2017,2018,2019,2020,2021))
+
+
+data %>% 
+  filter(근거법령 == "특강법") %>% filter(피해자수 != 1) %>% view()
